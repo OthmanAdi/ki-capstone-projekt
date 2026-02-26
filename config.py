@@ -10,6 +10,7 @@ class Config:
     COLLECTION_NAME = "faq"
 
     # Search
+    DEFAULT_QUERY = "I forgot my password"
     DEFAULT_TOP_K = 3
     MAX_TOP_K = 10
 

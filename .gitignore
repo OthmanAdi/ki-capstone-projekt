@@ -29,3 +29,12 @@ Thumbs.db
 
 # wandb
 wandb/
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+
+claude_context.md
+requirements_detailed.txt

@@ -11,9 +11,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import os
+from openai import OpenAI
+from dotenv import load_dotenv
 from config import Config
-
-# TODO: openai, os, dotenv importieren
 
 
 # TODO: ask_faq(query, collection, top_k) → dict
@@ -45,3 +46,186 @@ from config import Config
 #   return {"answer": ..., "sources": [...], "query": query}
 #
 # Fail Fast: if not os.getenv("OPENAI_API_KEY") → Fehlermeldung zurückgeben
+
+
+# =============================================================================
+# SEMANTIC SEARCH — The core search function
+# =============================================================================
+# Returns top-k results for a single query string as a formatted list.
+
+def semantic_search(
+        query: str,
+        collection,
+        top_k: int,
+        category: str = None,
+        source: str = None,
+    ) -> list:
+    """
+    Searches for the most similar FAQs to a query using semantic similarity.
+
+    Args:
+        query (str): User's search query
+        collection: ChromaDB collection instance
+        top_k (int): Number of results to return
+        category (str, optional): Filter by category metadata
+        source (str, optional): Filter by source metadata
+
+    Returns:
+        list: List of dictionaries containing question, answer, category, and distance
+
+    Raises:
+        ValueError: If query is empty or top_k is invalid
+        TypeError: If collection is None
+    """
+
+    # Validate inputs
+    if collection is None:
+        raise TypeError("Collection cannot be None. Initialize ChromaDB first and pass a valid collection.")
+
+    if not query or not query.strip():
+        raise ValueError("Query cannot be empty.")
+
+    if not isinstance(top_k, int) or top_k <= 0:
+        raise ValueError(f"top_k must be a positive integer, got: {top_k}")
+
+    # Build filter clause
+    where_clause = None
+    if category and source:
+        where_clause = {
+            "$and": [
+                {"category": category},
+                {"source": source}
+            ]
+        }
+    elif category:
+        where_clause = {"category": category}
+    elif source:
+        where_clause = {"source": source}
+
+    try:
+        # Query ChromaDB
+        results = collection.query(
+            query_texts=[query],
+            n_results=top_k,
+            where=where_clause
+        )
+    except Exception as error:
+        print(f"⚠ ChromaDB query failed: {str(error)}")
+        return []
+
+    # Format results
+    formatted = []
+    if len(results["documents"][0]) > 0: # If results where found
+        for idx in range(len(results["documents"][0])):
+            try:
+                formatted.append({
+                    "question": results["documents"][0][idx],
+                    "answer": results["metadatas"][0][idx]["answer"],
+                    "category": results["metadatas"][0][idx].get("category", "unknown"), # If category is not present, then assign default: "category", "unknown"
+                    "distance": results["distances"][0][idx] # Smaller numbers = more similar
+                })
+            except (KeyError, IndexError) as error:
+                print(f"⚠ Skipping result {idx} due to malformed data: {error}")
+                continue
+    else:
+        if where_clause:
+            print(f"ℹ No matches found for query '{query}' with filters: {where_clause}")
+        else:
+            print(f"ℹ No matches found for query '{query}'")
+
+    return formatted
+
+# =============================================================================
+# SEARCH WRAPPER
+# =============================================================================
+# Wrapper for conducting semantic searches for multiple queries
+
+def wrap_search(
+        query,
+        collection,
+        category: str = None,
+        source: str = None,
+        top_k: int = 3,
+        verbose: bool = True
+    ) -> dict:
+    """
+    Conducts semantic search using embeddings.
+    Accepts either a single query (str) or multiple queries (list).
+    Returns top k results per query (dict).
+
+    Args:
+        query (str or list): Single query string or list of query strings
+        collection: ChromaDB collection instance
+        category (str, optional): Filter by category (e.g., "payment", "subscription")
+        source (str, optional): Filter by data source (e.g., "faq", "docs")
+        top_k (int): Number of results per query (default: 3)
+        verbose (bool): Print results to console (default: True)
+
+    Returns:
+        dict: Dictionary mapping each query to its results
+              Format: {query_text: [list of result dicts]}
+
+    Examples:
+        # Print results
+        wrap_search("costs", collection, category="payment")
+
+        # Get results without printing
+        results = wrap_search("costs", collection, verbose=False)
+
+        # Multiple queries
+        results = wrap_search(["free trial", "cancel"], collection)
+    """
+
+    #  Validate and convert query to list
+    if isinstance(query, str):
+        queries = [query]
+    elif isinstance(query, list):
+        if not query:  # Empty list check
+            print("⚠ Query list is empty. Returning empty results.")
+            return {}
+        queries = query
+    else:
+        print(
+            f"✗ Invalid query type: {type(query).__name__}. "
+            f"Expected str or list, got: {repr(query)}"
+        )
+        return
+
+    print("\n" + "=" * 60)
+    print("Starting semantic search...")
+    print("=" * 60)
+    print(f"Searching for {len(queries)} {'query' if len(queries) == 1 else 'queries'} ...")
+
+    # Store all results
+    all_results  = {}
+
+    for idx, q in enumerate(queries, 1):
+        if verbose:
+            print(f"\n{'─' * 60}")
+            print(f"QUERY {idx}: \"{q}\"")
+            print(f"{'─' * 60}")
+
+        try:
+            results = semantic_search(q, collection, top_k, category, source)
+        except (ValueError, TypeError) as error:
+            print(f"⚠ Skipping query '{q}': {error}")
+            all_results[q] = []
+            continue
+
+        # Store results for respective query
+        all_results[q] = results
+
+        if verbose:
+            if not results:
+                print("      No results found.")
+            else: # Print results
+                for i, r in enumerate(results, 1):
+                    print(f"\n  [{i}] Distance: {r['distance']:.3f}")
+                    print(f"      Query:   {r['question']}")
+                    print(f"      Answer: {r['answer'][:60]}...")
+                    print(f"      Category: {r['category']}")
+
+
+    return all_results
+
+
