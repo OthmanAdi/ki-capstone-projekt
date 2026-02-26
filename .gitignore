@@ -1,0 +1,31 @@
+# Environment
+.env
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# ChromaDB
+faq_database/
+*.sqlite3
+
+# Models
+*.safetensors
+*.bin
+my_model/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# wandb
+wandb/

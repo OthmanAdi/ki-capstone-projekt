@@ -1,0 +1,18 @@
+# Vector Database
+chromadb
+
+# Web Framework
+fastapi
+uvicorn[standard]
+
+# ML Demo UI
+gradio
+
+# Experiment Tracking
+wandb
+
+# LLM API
+openai
+
+# Environment
+python-dotenv
