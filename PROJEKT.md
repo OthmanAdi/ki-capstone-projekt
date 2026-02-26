@@ -39,7 +39,7 @@ JETZT:      Alles zusammen. Ein System. Nicht Fragmente.
 ## 1. Branch erstellen
 
 ```bash
-git clone <REPO_URL>
+git clone https://github.com/OthmanAdi/ki-capstone-projekt.git
 cd ki-capstone-projekt
 git checkout -b EUER_NAME/capstone
 ```
