@@ -16,37 +16,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from config import Config
 
-
-# TODO: ask_faq(query, collection, top_k) → dict
-#
-# Schritt 1: collection.query(query_texts=[query], n_results=top_k)
-#
-# Schritt 2: Kontext als String bauen
-#   for i in range(len(results["documents"][0])):
-#       frage = results["documents"][0][i]
-#       antwort = results["metadatas"][0][i]["antwort"]
-#       context += f"Frage: {frage}\nAntwort: {antwort}\n\n"
-#
-# Schritt 3: Prompts bauen
-#   system_prompt = "Du bist ein hilfreicher FAQ-Assistent..."
-#   user_prompt = f"Frage: {query}\n\nRelevante FAQs:\n{context}"
-#
-# Schritt 4: OpenAI API Call
-#   client = openai.OpenAI()
-#   response = client.chat.completions.create(
-#       model=Config.LLM_MODEL,
-#       messages=[
-#           {"role": "system", "content": system_prompt},
-#           {"role": "user", "content": user_prompt},
-#       ],
-#       max_tokens=Config.MAX_TOKENS,
-#   )
-#
-# Schritt 5: Return
-#   return {"answer": ..., "sources": [...], "query": query}
-#
-# Fail Fast: if not os.getenv("OPENAI_API_KEY") → Fehlermeldung zurückgeben
-
+load_dotenv()
 
 # =============================================================================
 # SEMANTIC SEARCH — The core search function
@@ -234,7 +204,7 @@ def wrap_search(
 # =============================================================================
 # Create a system prompt for LLM calls
 
-def create_system_prompt(query: str, search_results: list, system_role: str = "helpful customer service assistant") -> str:
+def create_system_prompt(query: str, search_results: list, system_role: str) -> str:
     """
     Creates a structured prompt for the LLM based on search results.
 
@@ -300,9 +270,9 @@ def create_system_prompt(query: str, search_results: list, system_role: str = "h
 # =============================================================================
 # GET LLM ANSWER
 # =============================================================================
-# Call LLM to transform search results in answer
+# Call LLM to transform search results into natural answer
 
-def get_llm_answer(prompt: str, max_tokens: int = 300) -> str:
+def get_llm_answer(prompt: str, max_tokens: int) -> str:
     """
     Sends the prompt to OpenAI GPT-4-mini and returns the generated answer.
 
@@ -320,10 +290,10 @@ def get_llm_answer(prompt: str, max_tokens: int = 300) -> str:
 
     # DEFENSIVE: Validate parameters
     if not prompt or not isinstance(prompt, str):
-        raise ValueError("prompt must be a non-empty string")
+        raise ValueError("[LLM Error] Prompt must be a non-empty string")
 
     if max_tokens < 1:
-        raise ValueError(f"max_tokens must be >= 1, got {max_tokens}")
+        raise ValueError(f"[LLM Error] max_tokens must be >= 1, got {max_tokens}")
 
     # Initialize OpenAI client with KEY from .env
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -339,3 +309,99 @@ def get_llm_answer(prompt: str, max_tokens: int = 300) -> str:
 
     # Extract and return the generated text
     return response.choices[0].message.content
+
+# =============================================================================
+# ASK FAQ PIPELINE
+# =============================================================================
+
+def ask_faq(query: str, collection, top_k: int, category: str = None, source: str = None, system_role: str = "helpful customer service assistant", max_tokens: int = 300) -> dict:
+    """
+    Tests the complete GOLD-level pipeline with LLM integration.
+    """
+
+    print("\n" + "=" * 70)
+    print("FAQ Pipeline")
+    print("=" * 70)
+
+    # Fail fast without OpenAi Key
+    if not os.getenv("OPENAI_API_KEY"):  # Checks if API key exists
+        print("ERROR: OPENAI_API_KEY not found!")
+        return {"error": "OPENAI_API_KEY not found", "answer": None, "sources": [], "query": query}
+
+    print("✓ OpenAI API Key found")
+
+    print("\n[1] Starting semantic search...")
+    print(f"Query: {query}")
+
+
+    # Conduct semantic search
+    try:
+        result = semantic_search(query=query, collection=collection, top_k=top_k, category=category, source=source)
+
+    except (ValueError, TypeError) as error:
+        print(f"⚠ Semantic search failed: {error}")
+        return {"error": str(error), "answer": None, "sources": [], "query": query}
+
+    # Construct LLM prompt
+    print("[2] Creating prompt from template...")
+    print(f"    Context built from {len(result)} FAQ entries")
+    try:
+        prompt = create_system_prompt(query, result, system_role)
+
+    except Exception as error:
+        print(f"Prompt generation failed with error: {error}")
+        return {"error": str(error), "answer": None, "sources": [], "query": query}
+
+    print("[3] Calling LLM...")
+    # Create LLM answer
+    try:
+        answer = get_llm_answer(prompt, max_tokens)
+        print(f"🤖 LLM Answer: {answer}")
+    except Exception as error:
+        print(f"LLM call failed with error: {error}")
+        return {"error": str(error), "answer": None, "sources": [], "query": query}
+
+    return {
+        "query": query,
+        "answer": answer,
+        "sources": [
+            {
+                "question": r["question"],
+                "category": r["category"],
+                "source": r["source"],
+                "distance": r["distance"],
+            }
+            for r in result
+        ]
+    }
+
+
+# TODO: ask_faq(query, collection, top_k) → dict
+#
+# Schritt 1: collection.query(query_texts=[query], n_results=top_k)
+#
+# Schritt 2: Kontext als String bauen
+#   for i in range(len(results["documents"][0])):
+#       frage = results["documents"][0][i]
+#       antwort = results["metadatas"][0][i]["antwort"]
+#       context += f"Frage: {frage}\nAntwort: {antwort}\n\n"
+#
+# Schritt 3: Prompts bauen
+#   system_prompt = "Du bist ein hilfreicher FAQ-Assistent..."
+#   user_prompt = f"Frage: {query}\n\nRelevante FAQs:\n{context}"
+#
+# Schritt 4: OpenAI API Call
+#   client = openai.OpenAI()
+#   response = client.chat.completions.create(
+#       model=Config.LLM_MODEL,
+#       messages=[
+#           {"role": "system", "content": system_prompt},
+#           {"role": "user", "content": user_prompt},
+#       ],
+#       max_tokens=Config.MAX_TOKENS,
+#   )
+#
+# Schritt 5: Return
+#   return {"answer": ..., "sources": [...], "query": query}
+#
+# Fail Fast: if not os.getenv("OPENAI_API_KEY") → Fehlermeldung zurückgeben

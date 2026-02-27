@@ -20,8 +20,17 @@ Built as the Week 4 Capstone for the KI & Python module at Morphos GmbH.
 |---|---|---|
 | 🥉 Bronze | ChromaDB setup + persistence test | ✅ Done |
 | 🥈 Silver | FastAPI REST API + Gradio Web UI | ✅ Done |
-| 🥇 Gold | RAG pipeline + wandb experiment tracking + embedding model comparison | ⬜ In Progress |
+| 🥇 Gold | RAG pipeline + wandb experiment tracking + embedding model comparison | 🔄 In Progress |
 | 💎 Diamond | Tests + polished README + own fine-tuned model | ⬜ Bonus |
+
+### Gold — Detailed Status
+
+| Component | Status |
+|---|---|
+| `rag/pipeline.py` — `ask_faq()` RAG function | ✅ Done |
+| `api/main.py` — `POST /ask` endpoint | ✅ Done |
+| `ui/app.py` — AI Answer tab (Gradio) | ✅ Done |
+| `scripts/03_evaluate.py` — wandb model comparison | ⬜ Todo |
 
 ---
 
@@ -105,7 +114,7 @@ Available endpoints:
 | `/health` | GET | Status + document count |
 | `/categories` | GET | All available FAQ categories |
 | `/search` | GET | Semantic search (query, top_k, category) |
-| `/ask` | POST | RAG pipeline — full AI answer *(Gold)* |
+| `/ask` | POST | RAG pipeline — full AI answer |
 
 ### Gradio Web UI
 
@@ -115,7 +124,33 @@ python ui/app.py
 
 Local: `http://localhost:7860`
 
+Two tabs:
+
+| Tab | Description |
+|---|---|
+| 🔍 Semantic Search | Returns ranked FAQ entries with similarity scores |
+| 🤖 AI Answer | Full RAG pipeline — GPT-4o-mini answers based on FAQ context |
+
 ---
+
+## 🔬 RAG Pipeline — How It Works
+
+`ask_faq()` in `rag/pipeline.py` runs the complete pipeline in 3 steps:
+
+```
+[1] Semantic Search    — ChromaDB finds top-k relevant FAQ entries
+[2] Prompt Building    — FAQ entries are formatted as context for the LLM
+[3] LLM Call          — GPT-4o-mini generates a grounded answer
+```
+
+Returns:
+```python
+{
+    "query":   "I forgot my password",
+    "answer":  "To reset your password, click 'Forgot Password'...",
+    "sources": [{"question": ..., "category": ..., "distance": ...}]
+}
+```
 
 ## 🛠️ Tech Stack
 
@@ -130,29 +165,31 @@ Local: `http://localhost:7860`
 
 ---
 
-## 🔬 Gold — Embedding Model Comparison
+## 🔬 Gold — Embedding Model Comparison *(Todo)*
 
-A key focus of the Gold challenge is comparing embedding models with wandb:
+A key focus of the remaining Gold work is comparing embedding models with wandb.
+The evaluation pipeline is modular — adding a new model = one new entry in a list, no logic changes needed.
 
 | Model | Type |
 |---|---|
 | `all-MiniLM-L6-v2` | Baseline (English) |
 | `paraphrase-multilingual-MiniLM-L12-v2` | Multilingual comparison |
 
-The evaluation pipeline is modular — adding a new model = one new entry in a list, no logic changes.
-
+Metrics tracked per model:
+- `avg_similarity` — mean similarity score across test queries
+- `category_accuracy` — % of queries where the top result matched the expected category
 ---
 
 ## 📦 Dependencies
 
 ```
-chromadb          # Vector database
-fastapi           # REST API
-uvicorn[standard] # ASGI server
-gradio            # Web UI
-wandb             # Experiment tracking
-openai            # LLM API
-python-dotenv     # Environment variables
+chromadb               # Vector database
+fastapi                # REST API
+uvicorn[standard]      # ASGI server
+gradio                 # Web UI
+wandb                  # Experiment tracking
+openai                 # LLM API
+python-dotenv          # Environment variables
 sentence-transformers  # Embedding models
 ```
 

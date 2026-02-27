@@ -19,7 +19,7 @@ import chromadb
 
 # ── Internal ──────────────────────────────────────────────────
 from config import Config
-from rag.pipeline import semantic_search
+from rag.pipeline import semantic_search, ask_faq
 
 
 # ── DB init ─────────────────────────────────────────────
@@ -90,13 +90,46 @@ def search_faq(query: str, top_k: int, category: str, source: str):
     output = f"**{len(results)} Results for:** '{query}'\n\n---\n\n"
 
     for i, r in enumerate(results):  # r is one dict from semantic_search
-        similarity = round((1 - r["distance"]) * 100)
+        similarity = max(0, round((1 - r["distance"]) * 100))
         output += f"### [{i + 1}] Similarity: {similarity}%\n"
         output += f"**Question:** {r['question']}\n\n"
         output += f"**Answer:** {r['answer']}\n\n"
         output += "---\n\n"
 
     return output
+
+# ── LLM seach function ─────────────────────────────────────────────
+
+def ask_faq_ui(query: str, top_k: int) -> str:
+    """
+    Wrapper: connects Gradio UI to ask_faq pipeline.
+    """
+
+    # Guard: empty query
+    if not query or not query.strip():
+        return "⚠️ Please enter a question."
+
+    # Call RAG pipeline
+    result = ask_faq(
+        query=query,
+        collection=collection,
+        top_k=top_k
+    )
+
+    # Check for pipeline error
+    if result.get("error"):
+        return f"❌ Error: {result['error']}"
+
+    # Format output as Markdown
+    output  = f"**Answer:**\n\n{result['answer']}\n\n---\n\n"
+    output += f"**Sources used ({len(result['sources'])}):**\n\n"
+
+    for i, s in enumerate(result["sources"], 1):
+        similarity = max(0, round((1 - s["distance"]) * 100))  # clamp to 0 minimum
+        output += f"**[{i}]** {s['question']} *(Similarity: {similarity}%)*\n\n"
+
+    return output
+
 
 # ── Gradio Interface ─────────────────────────────────────────────
 
@@ -105,45 +138,44 @@ filter_options = get_filter_options()
 categories = filter_options["categories"]
 sources = filter_options["sources"]
 
-demo = gr.Interface(
-    fn=search_faq,
-    inputs=[
-        gr.Textbox(
-            label="Your question",
-            placeholder="e.g. I forgot my password...",
-            lines=2
-        ),
-        gr.Slider(
-            minimum=1,
-            maximum=8,
-            value=3,
-            step=1,
-            label="N results"
-        ),
-        gr.Dropdown(
-            choices=categories,
-            value="all",
-            label="Filter for categories",
-        ),
-        gr.Dropdown(
-            choices=sources,
-            value="all",
-            label="Filter for data sources",
-        )
-    ],
-    outputs=gr.Markdown(label="Results"),
-    title="🔍 Semantic FAQ Search",
-    description="Semantic search powered by ChromaDB — finds relevant answers without exact Keyword mapping.",
-    examples=[
-        ["I forgot my password", 3, "all", "faq"],
-        ["How much is that?", 2, "price", "faq"],
-        ["I want to terminate my account", 3, "subscription", "faq"],
-        ["How can I contact you?", 1, "support", "faq"],
-    ]
-)
+with gr.Blocks(title="FAQ Assistant") as demo:
 
-# Lokal:
-# demo.launch()
+    with gr.Tab("🔍 Semantic Search"):       # Tab 1 — deine bisherige Logik
+        gr.Markdown("## Semantic FAQ Search")
+        gr.Markdown("Finds relevant answers without exact keyword mapping.")
+
+        with gr.Row():
+            query1 = gr.Textbox(label="Your question", placeholder="e.g. I forgot my password...", lines=2)
+            top_k1 = gr.Slider(minimum=1, maximum=8, value=3, step=1, label="N results")
+
+        with gr.Row():
+            category1 = gr.Dropdown(choices=categories, value="all", label="Filter by category")
+            source1   = gr.Dropdown(choices=sources, value="all", label="Filter by source")
+
+        search_btn = gr.Button("Search")                 # Explicit button replaces auto-submit
+        output1    = gr.Markdown(label="Results")
+
+        search_btn.click(                                # Wire button to function
+            fn=search_faq,
+            inputs=[query1, top_k1, category1, source1],
+            outputs=output1
+        )
+
+    with gr.Tab("🤖 AI Answer"):             # Tab 2 — RAG pipeline
+        gr.Markdown("## AI-Generated Answer")
+        gr.Markdown("GPT-4o-mini answers your question based on relevant FAQ entries.")
+
+        query2  = gr.Textbox(label="Your question", placeholder="e.g. How do I cancel?", lines=2)
+        top_k2  = gr.Slider(minimum=1, maximum=5, value=3, step=1, label="FAQ entries to use as context")
+
+        ask_btn = gr.Button("Ask AI")
+        output2 = gr.Markdown(label="AI Answer")
+
+        ask_btn.click(
+            fn=ask_faq_ui,                   # ← wrapper function (see below)
+            inputs=[query2, top_k2],
+            outputs=output2
+        )
 
 # Öffentliche URL (72h):
 demo.launch(share=True)

@@ -29,3 +29,9 @@ class Config:
 
     # wandb
     WANDB_PROJECT = "ki-capstone"
+
+    # Embedding models
+    EMBEDDING_MODELS = [
+        "all-MiniLM-L6-v2",
+        "paraphrase-multilingual-MiniLM-L12-v2",
+    ]

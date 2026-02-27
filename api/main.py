@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 # ── Internal ──────────────────────────────────────────────────
-from rag.pipeline import semantic_search
+from rag.pipeline import semantic_search, ask_faq
 from config import Config
 
 # ── App & DB init ─────────────────────────────────────────────
@@ -43,6 +43,18 @@ class SearchResponse(BaseModel):
     query: str
     count: int
     results: list[SearchResult]
+
+class LLMMetadata(BaseModel):
+    question: str
+    category: str
+    source: str
+    distance: float
+
+class LLMAnswer(BaseModel):
+    query: str
+    answer: str
+    sources: list[LLMMetadata]
+
 
 # ── Endpoints ─────────────────────────────────────────────────
 @app.get("/")
@@ -138,36 +150,47 @@ def search(query: str = "I forgot my Password", top_k: int = 3, category: str = 
         results=formatted
     )
 
+@app.post("/ask", response_model=LLMAnswer)
+def ask(query: str = "I forgot my Password", top_k: int = 3, category: str = None, source: str = None, system_role: str = "helpful customer service assistant", max_tokens: int = 300):
+    """
+    RAG pipeline: semantic search + LLM answer generation.
 
+    Finds the most relevant FAQ entries for the query via ChromaDB,
+    then passes them as context to GPT-4o-mini to generate a natural language answer.
 
+    - **query**: Customer question (required)
+    - **top_k**: Number of FAQ entries to retrieve as context (default: 3)
+    - **category**: Optional filter — restricts search to one category
+    - **source**: Optional filter — restricts search to one data source
+    - **system_role**: LLM persona (default: helpful customer service assistant)
+    - **max_tokens**: Maximum response length in tokens (default: 300)
 
-# TODO: FastAPI App erstellen
-#   app = FastAPI(title=Config.API_TITLE, version=Config.API_VERSION)
+    Returns the generated answer and the FAQ entries used as sources.
+    """
 
-# TODO: ChromaDB Client + Collection laden
-#   Warnung wenn collection.count() == 0
+    # Input validation
+    if not query or not query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
+    if not (1 <= top_k <= Config.MAX_TOP_K):
+        raise HTTPException(status_code=400, detail=f"top_k must be between 1 and {Config.MAX_TOP_K}.")
 
-# TODO: Pydantic Response Models
-#
-# class SearchResult(BaseModel):
-#     frage: str
-#     antwort: str
-#     distance: float
-#
-# class SearchResponse(BaseModel):
-#     query: str
-#     count: int
-#     results: list[SearchResult]
+    result = ask_faq(
+        query=query,
+        collection=collection,
+        top_k=top_k,
+        category=category,
+        source=source,
+        system_role=system_role,
+        max_tokens=max_tokens
+    )
 
+    # Check result for error
+    if result.get("error"):  # Check if pipeline failed
+        raise HTTPException(status_code=500, detail=result["error"])
 
-# TODO: Endpoints
-#
-# GET /          → API Info + Endpoints-Liste
-# GET /health    → Status + Dokumenten-Anzahl
-# GET /search    → Semantic Search (query, top_k, kategorie)
-#                  Validierung: leere Query → 400, top_k Range → 400
-# GET /categories → Alle Kategorien aus den Metadaten
-#
-# GOLD:
-# POST /ask      → RAG Pipeline (importiert ask_faq aus rag/pipeline.py)
+    return LLMAnswer(
+        query=result["query"],
+        answer=result["answer"],
+        sources=result["sources"]
+    )
