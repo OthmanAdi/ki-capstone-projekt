@@ -297,4 +297,45 @@ def create_system_prompt(query: str, search_results: list, system_role: str = "h
     return prompt
 
 
+# =============================================================================
+# GET LLM ANSWER
+# =============================================================================
+# Call LLM to transform search results in answer
 
+def get_llm_answer(prompt: str, max_tokens: int = 300) -> str:
+    """
+    Sends the prompt to OpenAI GPT-4-mini and returns the generated answer.
+
+    Args:
+        prompt: The complete prompt string to send to the LLM
+        max_tokens: Maximum length of the response (default: 300)
+
+    Returns:
+        The generated answer from the LLM as a string
+
+    Raises:
+        ValueError: If prompt is empty or max_tokens is invalid
+        RuntimeError: If API call fails
+    """
+
+    # DEFENSIVE: Validate parameters
+    if not prompt or not isinstance(prompt, str):
+        raise ValueError("prompt must be a non-empty string")
+
+    if max_tokens < 1:
+        raise ValueError(f"max_tokens must be >= 1, got {max_tokens}")
+
+    # Initialize OpenAI client with KEY from .env
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    # Make API call to OpenAI
+    response = client.chat.completions.create(  # Creates a chat completion request
+        model="gpt-4o-mini",
+        max_tokens=max_tokens,
+        messages=[
+            {"role": "user", "content": prompt}  # User message containing the prompt
+        ]
+    )
+
+    # Extract and return the generated text
+    return response.choices[0].message.content
