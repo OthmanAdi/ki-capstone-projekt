@@ -222,6 +222,90 @@ python ui/app.py
 
 ---
 
+# GOLD+ — Fine-Tuning: Kategorie-Classifier (OPTIONAL)
+## Optional | Freitag | 1-2 Stunden
+
+**WICHTIG: Das Projekt funktioniert OHNE Fine-Tuning. Das hier ist ein Bonus.**
+
+### Was ist das?
+
+Ihr trainiert ein deutsches BERT-Modell das automatisch erkennt zu welcher Kategorie eine Frage gehört. Wenn jemand fragt "Ich habe mein Passwort vergessen" sagt das Modell automatisch: `konto`.
+
+```
+VORHER (ohne Classifier):
+User Query → ChromaDB sucht in ALLEN Einträgen
+
+NACHHER (mit Classifier):
+User Query → Classifier: "konto" → ChromaDB sucht NUR in Kategorie "konto"
+                                    → Bessere Ergebnisse, weniger Noise
+```
+
+### Was ihr macht
+
+1. **`data/faq_data.py`** — auf mindestens 20 Einträge erweitern (braucht ihr auch für GOLD)
+2. **`scripts/04_fine_tune.py`** — Fine-Tuning implementieren (TODOs ausfüllen)
+3. **`fine_tune/classifier.py`** — predict_category() implementieren (TODOs ausfüllen)
+4. **`api/main.py`** oder **`ui/app.py`** — Optional: predict_category() einbauen
+
+### Was in `04_fine_tune.py` drin sein muss
+
+```
+[ ] prepare_data(): FAQ_DATA → Dataset mit text + label
+[ ] label_map erstellen: {"konto": 0, "preis": 1, ...}
+[ ] Train/Test Split (80/20)
+[ ] AutoTokenizer + AutoModelForSequenceClassification laden
+[ ] TrainingArguments (lr=2e-5, epochs=5, batch_size=8)
+[ ] Trainer erstellen + trainer.train()
+[ ] Model + Tokenizer + label_map.json speichern
+[ ] classification_report ausgeben
+```
+
+### Was in `fine_tune/classifier.py` drin sein muss
+
+```
+[ ] predict_category(text) → str oder None
+[ ] Modell + Tokenizer + label_map laden
+[ ] Wenn Modell nicht existiert → None zurückgeben (kein Fehler!)
+[ ] Inference: tokenize → model → argmax → Label
+```
+
+### Wie es optional eingebaut wird
+
+In `api/main.py` oder `ui/app.py` — wenn ihr wollt:
+
+```python
+from fine_tune.classifier import predict_category
+
+# In eurem Search-Endpoint oder search_faq():
+auto_kategorie = predict_category(query)
+if auto_kategorie:
+    # Modell existiert → Auto-Filter
+    where_clause = {"kategorie": auto_kategorie}
+else:
+    # Kein Modell → normales Verhalten, kein Filter
+    where_clause = None
+```
+
+**Das Projekt läuft IMMER.** `predict_category()` gibt `None` zurück wenn kein Modell trainiert wurde. Kein Fehler. Kein Crash. Einfach kein Auto-Filter.
+
+### Fine-Tuning Checkliste
+
+- [ ] Mindestens 20 FAQ-Einträge in `data/faq_data.py`
+- [ ] `python scripts/04_fine_tune.py` — läuft, Modell wird gespeichert
+- [ ] `./models/kategorie_classifier/` existiert mit Modell-Dateien
+- [ ] `predict_category("Passwort vergessen")` → gibt eine Kategorie zurück
+- [ ] Projekt läuft auch OHNE das Modell (Modell-Ordner löschen → alles funktioniert noch)
+
+### Karriere-Signal
+
+Das ist Woche-2-Skill (Fine-Tuning) direkt angewandt in einem Production-System. Nicht als Übung. Als Feature.
+
+> "Ich habe einen deutschen BERT-Classifier fine-tuned der FAQ-Kategorien vorhersagt und als Pre-Filter für meine Vektor-Suche dient."
+
+Das ist ein Interview-Satz der sitzt.
+
+---
+
 # DIAMOND — Portfolio-Qualität
 ## Bonus | Freitag | 2+ Stunden
 

@@ -27,3 +27,8 @@ class Config:
 
     # wandb
     WANDB_PROJECT = "ki-capstone"
+
+    # Fine-Tuning (OPTIONAL — Projekt funktioniert ohne)
+    CLASSIFIER_BASE_MODEL = "deepset/gbert-base"
+    CLASSIFIER_MODEL_PATH = "./models/kategorie_classifier"
+    CLASSIFIER_EPOCHS = 5

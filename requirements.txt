@@ -14,5 +14,12 @@ wandb
 # LLM API
 openai
 
+# Fine-Tuning (OPTIONAL — für Kategorie-Classifier)
+transformers
+torch
+datasets
+accelerate
+scikit-learn
+
 # Environment
 python-dotenv

@@ -17,6 +17,7 @@ faq_database/
 *.safetensors
 *.bin
 my_model/
+models/
 
 # IDE
 .vscode/
