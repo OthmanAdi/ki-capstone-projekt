@@ -12,12 +12,141 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# ── Third-party ───────────────────────────────────────────────
+import gradio as gr
+import chromadb
+
+
+# ── Internal ──────────────────────────────────────────────────
 from config import Config
+from rag.pipeline import semantic_search
 
-# TODO: gradio, chromadb importieren
 
-# TODO: ChromaDB Client + Collection laden
+# ── DB init ─────────────────────────────────────────────
+client = chromadb.PersistentClient(Config.DB_PATH)
+collection = client.get_collection(Config.COLLECTION_NAME)
 
+# ── Fetch categories dynamically from ChromaDB ────────────────
+def get_filter_options() -> dict[str, list[str]]:
+    """Reads all unique categories and sources from ChromaDB metadata at startup.
+    Returns:
+        dict with keys "categories" and "sources", each a sorted list with "all" prepended.
+    """
+    results = collection.get(include=["metadatas"])
+
+    temp = []
+    for meta in results["metadatas"]:
+        if "category" in meta:
+            temp.append(meta["category"])
+    categories = sorted(set(temp))
+
+    temp = []
+    for meta in results["metadatas"]:
+        if "source" in meta:
+            temp.append(meta["source"])
+    sources = sorted(set(temp))
+
+    return {
+        "categories": ["all"] + categories,  # "all" always first
+        "sources": ["all"] + sources,  # "all" always first
+    }
+
+# ── Search function ─────────────────────────────────────────────
+
+def search_faq(query: str, top_k: int, category: str, source: str):
+    """
+    Connects the Gradio interface to ChromaDB via semantic_search.
+    Gradio calls this function when the user clicks 'Submit'.
+    Input: query (str), top_k (int), category (str)
+    Output: Formatted Markdown string
+    """
+
+    # Guard: empty query
+    if not query or not query.strip():
+        return "⚠️ Please enter a search query."
+
+    # Guard: invalid category
+    if category != "all" and category not in categories:
+        return f"⚠️ Unknown category '{category}'."
+
+    # Guard: invalid source
+    if source != "all" and source not in sources:
+        return f"⚠️ Unknown category '{category}'."
+
+    # Call shared semantic_search function
+    results = semantic_search(  # returns a list of dicts
+        query=query,
+        collection=collection,
+        top_k=top_k,
+        category=category if category != "all" else None,  # all = no filter
+        source= source if source != "all" else None
+    )
+
+    if not results:
+        filter_info = f" in category '{category}'" if category and category != "all" else ""
+        return f"❌ No results were found {filter_info}."
+
+    # Format results as Markdown string for Gradio output
+    output = f"**{len(results)} Results for:** '{query}'\n\n---\n\n"
+
+    for i, r in enumerate(results):  # r is one dict from semantic_search
+        similarity = round((1 - r["distance"]) * 100)
+        output += f"### [{i + 1}] Similarity: {similarity}%\n"
+        output += f"**Question:** {r['question']}\n\n"
+        output += f"**Answer:** {r['answer']}\n\n"
+        output += "---\n\n"
+
+    return output
+
+# ── Gradio Interface ─────────────────────────────────────────────
+
+# Categories for filtering
+filter_options = get_filter_options()
+categories = filter_options["categories"]
+sources = filter_options["sources"]
+
+demo = gr.Interface(
+    fn=search_faq,
+    inputs=[
+        gr.Textbox(
+            label="Your question",
+            placeholder="e.g. I forgot my password...",
+            lines=2
+        ),
+        gr.Slider(
+            minimum=1,
+            maximum=8,
+            value=3,
+            step=1,
+            label="N results"
+        ),
+        gr.Dropdown(
+            choices=categories,
+            value="all",
+            label="Filter for categories",
+        ),
+        gr.Dropdown(
+            choices=sources,
+            value="all",
+            label="Filter for data sources",
+        )
+    ],
+    outputs=gr.Markdown(label="Results"),
+    title="🔍 Semantic FAQ Search",
+    description="Semantic search powered by ChromaDB — finds relevant answers without exact Keyword mapping.",
+    examples=[
+        ["I forgot my password", 3, "all", "faq"],
+        ["How much is that?", 2, "price", "faq"],
+        ["I want to terminate my account", 3, "subscription", "faq"],
+        ["How can I contact you?", 1, "support", "faq"],
+    ]
+)
+
+# Lokal:
+# demo.launch()
+
+# Öffentliche URL (72h):
+demo.launch(share=True)
 
 # TODO: search_faq(query, top_k, kategorie) → str
 #

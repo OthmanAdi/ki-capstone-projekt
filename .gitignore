@@ -36,5 +36,4 @@ wandb/
 .env
 .env.*
 
-claude_context.md
-requirements_detailed.txt
+hidden/*

@@ -359,9 +359,11 @@ Gradio:  `http://localhost:7860`
 **Ursache:** Kategorie-Namen sind case-sensitive. `"Konto"` ≠ `"konto"`.
 
 **Lösung:** Prüfe die echten Werte:
+
 ```python
 import chromadb
-client = chromadb.PersistentClient(path="./faq_database")
+
+client = chromadb.PersistentClient(path="../faq_database")
 collection = client.get_collection("faq")
 data = collection.get(include=["metadatas"])
 kategorien = set(m["kategorie"] for m in data["metadatas"])

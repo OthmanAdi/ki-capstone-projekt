@@ -20,6 +20,7 @@ class Config:
 
     # FastAPI
     API_TITLE = "FAQ Search API"
+    API_DESCRIPTION = "Semantic search over FAQ entries using ChromaDB."
     API_VERSION = "1.0.0"
     API_PORT = 8000
 

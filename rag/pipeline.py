@@ -71,7 +71,7 @@ def semantic_search(
         source (str, optional): Filter by source metadata
 
     Returns:
-        list: List of dictionaries containing question, answer, category, and distance
+        list: List of dictionaries containing question, answer, category, source and distance
 
     Raises:
         ValueError: If query is empty or top_k is invalid
@@ -122,6 +122,7 @@ def semantic_search(
                     "question": results["documents"][0][idx],
                     "answer": results["metadatas"][0][idx]["answer"],
                     "category": results["metadatas"][0][idx].get("category", "unknown"), # If category is not present, then assign default: "category", "unknown"
+                    "source": results["metadatas"][0][idx].get("source", "unknown"), # If source is not present, then assign default: "category", "unknown"
                     "distance": results["distances"][0][idx] # Smaller numbers = more similar
                 })
             except (KeyError, IndexError) as error:
@@ -227,5 +228,73 @@ def wrap_search(
 
 
     return all_results
+
+# =============================================================================
+# CREATE SYSTEM PROMPT
+# =============================================================================
+# Create a system prompt for LLM calls
+
+def create_system_prompt(query: str, search_results: list, system_role: str = "helpful customer service assistant") -> str:
+    """
+    Creates a structured prompt for the LLM based on search results.
+
+    Args:
+        query: The user's original question
+        search_results: List of FAQ matches from semantic search
+        system_role: Role description for the LLM
+
+    Returns:
+        Formatted prompt string for the LLM
+
+    Raises:
+        ValueError: If query is empty or search_results is invalid
+    """
+
+    # DEFENSIVE: Validate parameters
+    if not query or not isinstance(query, str):
+        raise ValueError("query must be a non-empty string")
+
+    if not isinstance(search_results, list):
+        raise ValueError("search_results must be a list")
+
+    # Build the FAQ context from search results
+    faq_context = ""
+    for i, result in enumerate(search_results, 1):
+        faq_context += f"\nFAQ {i}:\n"
+        faq_context += f"Question: {result['question']}\n"
+        faq_context += f"Answer: {result['answer']}\n"
+
+    # Create the complete prompt with instructions
+    prompt = f"""<system>
+        You are a {system_role}.
+        You job is to answer customer queries based on the FAQ-Database.
+
+        Rules:
+        1. Answer ONLY based on the provided FAQ entries
+        2. If the question cannot be answered through the FAQs, say so honestly
+        3. Be friendly and professional
+        4. Keep the answer brief and precise (2-3 sentences)
+        5. If multiple FAQ entries are relevant, combine the information
+        </system>
+
+        <context>
+        The following FAQ entries have been identified as relevant to the customer inquiry:
+        {faq_context}
+        </context>
+
+        <customer_query>
+        {query}
+        </customer_query>
+
+        <instruction>
+        Answer the customer inquiry based on the context.
+        If the relevance scores are low (< 0.5), point out that you are not certain.
+        </instruction>
+
+        <answer>
+        """
+
+    return prompt
+
 
 
